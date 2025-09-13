@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="category-section">
+    <div class="category-header">
+        <h2>
+            {% if current_category == 'All' %}
+                🌟 All Confessions
+            {% else %}
+                📂 {{ current_category }} Confessions
+            {% endif %}
+        </h2>
+        <div class="filter-controls">
+            <div class="category-tabs">
+                {% for category in categories %}
+                <a href="{{ url_for('index', category=category, sort=current_sort) }}" 
+                   class="category-tab {% if category == current_category %}active{% endif %}">
+                    {% if category == 'All' %}🌟
+                    {% elif category == 'Funny' %}😂
+                    {% elif category == 'Love' %}❤️
+                    {% elif category == 'Exam Stress' %}📚
+                    {% elif category == 'Family' %}👨‍👩‍👧‍👦
+                    {% elif category == 'Work' %}💼
+                    {% else %}💬
+                    {% endif %}
+                    {{ category }}
+                </a>
+                {% endfor %}
+            </div>
+            <div class="sort-tabs">
+                <a href="{{ url_for('index', category=current_category, sort='newest') }}" 
+                   class="sort-tab {% if current_sort == 'newest' %}active{% endif %}">
+                    <i class="fas fa-clock"></i> Newest
+                </a>
+                <a href="{{ url_for('index', category=current_category, sort='trending') }}" 
+                   class="sort-tab {% if current_sort == 'trending' %}active{% endif %}">
+                    <i class="fas fa-fire"></i> Trending
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="confessions-feed">
+    {% if not posts %}
+    <div class="empty-state">
+        <div class="empty-icon">📝</div>
+        <h3>No confessions yet{% if current_category != 'All' %} in {{ current_category }}{% endif %}</h3>
+        <p>Be the first to share your thoughts anonymously!</p>
+        <button onclick="showPostModal()" class="btn-primary large">
+            <i class="fas fa-plus"></i> Create First Confession
+        </button>
+    </div>
+    {% else %}
+    <div class="posts-grid">
+        {% for post in posts %}
+        <article class="post-card">
+            <div class="post-header">
+                <div class="post-author">
+                    <span class="anon-badge">{{ post.anon_id }}</span>
+                    <span class="category-badge">
+                        {% if post.category == 'Funny' %}😂
+                        {% elif post.category == 'Love' %}❤️
+                        {% elif post.category == 'Exam Stress' %}📚
+                        {% elif post.category == 'Family' %}👨‍👩‍👧‍👦
+                        {% elif post.category == 'Work' %}💼
+                        {% else %}💬
+                        {% endif %}
+                        {{ post.category }}
+                    </span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <span class="post-time">{{ post.timestamp }}</span>
+                    {% if session.role == 'admin' %}
+                        <button onclick="deletePost({{ post.id }})" class="admin-delete-btn">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="post-content">
+                <p>{{ post.content }}</p>
+            </div>
+            
+            <div class="post-actions">
+                <div class="vote-section">
+                    <button onclick="vote({{ post.id }}, 'up')" class="vote-btn upvote">
+                        <i class="fas fa-arrow-up"></i>
+                        <span class="vote-count">{{ post.upvotes }}</span>
+                    </button>
+                    <span class="vote-score">{{ post.score }}</span>
+                    <button onclick="vote({{ post.id }}, 'down')" class="vote-btn downvote">
+                        <i class="fas fa-arrow-down"></i>
+                        <span class="vote-count">{{ post.downvotes }}</span>
+                    </button>
+                </div>
+                
+                <div class="emoji-reactions">
+                    <button onclick="addEmoji({{ post.id }}, '❤️')" class="emoji-btn">❤️</button>
+                    <button onclick="addEmoji({{ post.id }}, '😂')" class="emoji-btn">😂</button>
+                    <button onclick="addEmoji({{ post.id }}, '😢')" class="emoji-btn">😢</button>
+                    <button onclick="addEmoji({{ post.id }}, '🔥')" class="emoji-btn">🔥</button>
+                </div>
+                
+                <div class="post-meta">
+                    <a href="{{ url_for('view_post', post_id=post.id) }}" class="comment-link">
+                        <i class="fas fa-comment"></i> {{ post.comment_count }} comments
+                    </a>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+
+<script>
+// Admin function to delete individual posts
+function deletePost(postId) {
+    if (confirm('Are you sure you want to delete this confession? This action cannot be undone.')) {
+        fetch(`/api/admin/delete_post/${postId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                location.reload();
+            } else {
+                showAlert(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Error deleting post', 'error');
+        });
+    }
+}
+
+// Show alert function
+function showAlert(message, type) {
+    const existingAlerts = document.querySelectorAll('.alert');
+    existingAlerts.forEach(alert => alert.remove());
+    
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type}`;
+    alert.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="alert-close">&times;</button>
+    `;
+    
+    const flashContainer = document.getElementById('flashMessages');
+    if (flashContainer) {
+        flashContainer.appendChild(alert);
+        
+        setTimeout(() => {
+            if (alert && alert.parentElement) {
+                alert.style.opacity = '0';
+                alert.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (alert && alert.parentElement) {
+                        alert.remove();
+                    }
+                }, 300);
+            }
+        }, 4000);
+    }
+}
+</script>
+{% endblock %}
